@@ -1,11 +1,6 @@
-# Add Image URLs
+# Add links (URLs) to a file field
 
-A module for ProcessWire CMS/CMF. Allows images to be added to an images field by pasting URLs.
+A module for ProcessWire CMS/CMF. Allows links to be added to a file field.
+See the source file AddLink.module for instructions.
 
-![image-urls](https://user-images.githubusercontent.com/1538852/33742747-a5481920-dc0e-11e7-82bc-4dd427bf443a.gif)
-
-## Usage
-
-[Install](http://modules.processwire.com/install-uninstall/) the Add Image URLs module.
-
-A "Paste URLs" button will be added to all image fields. Use the button to show a textarea where image URLs may be pasted, one per line. Images are added when the page is saved.
+![image-urls](https://processwire.com/talk/uploads/monthly_2020_01/urlupload.thumb.gif.90f1fd84e88ac2b241968ec9acd8811c.gif)
