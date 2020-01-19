@@ -1,0 +1,24 @@
+/*.url-upload-toggle { margin-left:4px; }
+.AdminThemeDefault .url-upload-toggle { padding-top:0.53em !important; padding-bottom:0.53em !important; }
+.AdminThemeReno .url-upload-toggle .ui-button-text { padding-top:8px; padding-bottom:8px; }
+.url-upload-container { overflow:hidden; display:none; }
+.url-upload-container textarea { margin-top:20px !important; resize:vertical !important; }*/
+
+/* AdminThemeDefault */
+.AdminThemeDefault .InputfieldFileData .InputfieldURL > label {
+	border-top: 0; /* ce das margin top, potem mora biti border povsod */
+	/*margin-top: 5px;*/
+}
+
+/* AdminThemeUikit */
+.AdminThemeUikit .InputfieldFileData .InputfieldURL {
+	border: 1px solid #d9e1ea;
+	/*border-top: 0;*/ /* ce das margin top, potem mora biti border povsod */
+	outline: none;
+	margin-top: 15px;
+}
+
+.AdminThemeUikit .InputfieldFileData .InputfieldURL > label {
+	padding-top: 10px;
+}
+

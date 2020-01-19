@@ -1,0 +1,201 @@
+<?php namespace ProcessWire;
+
+/**
+ *
+ * Add Image URLs
+ *
+ * @version 0.0.1
+ * @author Matjaž Potočnik, inspired by module Add Image URLs by Robin Sallis
+ *
+ * ProcessWire 3.x
+ * Copyright (C) Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * https://processwire.com
+
+ HOW it works:
+
+ 1. Create (or use existing) FieldtypeFile, name it "datoteka". Allow multiple files, 1 line description,
+    allow uploading of files with "link" (UPLOAD_FILE_EXTENSION const) extension
+ 2. Create (or use existing) FieldtypeURL, name it "povezava"
+ 3. Create template, name it "field-datoteka" and add a field "povezava" to teh template
+ 4. Add field "datoteka" to some template. Pages that use this template now have upload filed with the
+    description field and povezava field
+ 5. Install this module and change appropriate constants with the fields name, in this example
+    UPLOAD_FIELD = "datoteka" and URL_FIELD = "povezava"
+ 6. Install this module. It adds a link "Insert URL" next to the "Upload file" button. When you click
+    "Insert URL" link it "uploads" a fake file named "povezava_xxxxxxx.link" (xxxxxx are rundom numbers)
+    and adds "povezava" field where you can enter URL. Note that "povezava" field is visible only when
+    URL is "uploaded", its not present when you upload regular file
+    See video https://processwire.com/talk/topic/22829-link-upload/?do=findComment&comment=195776
+ 7. In the template file on the frontend you would iterate over "datoteka" field and render files as
+    usual, checking if current file has "povezava" field and it's non empty and file has "link" extension
+
+ */
+
+class AddLink extends WireData implements Module {
+
+	/**
+	 * Module information
+	 */
+	public static function getModuleInfo() {
+		return array(
+			'title' => "Add Links",
+			'summary' => 'Allows links to be added to files field',
+			'version' => '0.0.1',
+			'author' => 'Matja&#382; Poto&#269;nik',
+			//'href' => 'https://github.com/todo',
+			'icon' => 'link',
+			'autoload' => 'template=admin',
+			'requires' => 'ProcessWire>=3.0.126',
+		);
+	}
+
+	const UPLOAD_FIELD = "datoteka"; // name of upload field (FieldtypeFile), must support uploading the files with UPLOAD_FILE_EXTENSION
+	const URL_FIELD = "povezava"; // name of field holding the link URL (FiledtypeURL)
+	const UPLOAD_FILE_EXTENSION = "link"; // extension of the "uploaded" file
+	const UPLOAD_FILE_PREFIX = "povezava_"; // prefix of the "uploaded" file
+
+	protected $pagefile;
+
+
+	/**
+	 * Ready
+	 */
+	public function ready() {
+		$field = $this('wire')->fields->get(self::UPLOAD_FIELD);
+		$field->set('extensions', $field->extensions . " " . self::UPLOAD_FILE_EXTENSION);
+
+		$this->addHookAfter('InputfieldFile::render', $this, 'addUrlButton');
+		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
+		$this->addHookBefore('InputfieldFile::renderItem', $this, 'renderItemBefore');
+		$this->addHookAfter('InputfieldFile::renderItem', $this, 'renderItemAfter');
+		$this->addHookBefore('InputfieldURL::render', $this, 'hideField');
+	}
+
+	/**
+	 * Prevent rendering of self::URL_FIELD if contained inside self::UPLOAD_FIELD
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function hideField(HookEvent $event) {
+		$inputfieldURL = $event->object;
+		$field = $inputfieldURL->hasField;
+
+		//only for specific field
+		if(!$field || $field->name != self::URL_FIELD) return;
+
+		if($this->pagefile && $this->pagefile->ext() !== self::UPLOAD_FILE_EXTENSION) {
+			//hide "povezava"
+			$event->replace = true;
+		}
+	}
+
+	/**
+	 * Set $this->pagefile if field name is self::UPLOAD_FIELD
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function renderItemBefore(HookEvent $event) {
+		//if($this->config->ajax) return;
+
+		$inputfieldFile = $event->object;
+		$field = $inputfieldFile->hasField;
+
+		if(!$field) return;
+
+		//only for specific upload field name
+		if($field->name != self::UPLOAD_FIELD) return;
+
+		//pagefile needed in hideField hook
+		$this->pagefile = $event->arguments[0];
+	}
+
+	/**
+	 * Hide/change file information
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function renderItemAfter(HookEvent $event) {
+		//if($this->config->ajax) return;
+
+		$inputfieldFile = $event->object;
+		$field = $inputfieldFile->hasField;
+		$pagefile = $event->arguments[0];
+
+		if(!$field) return;
+
+		//only for specific upload field name
+		if($field->name != self::UPLOAD_FIELD) return;
+
+		//$field->set('extensions', $field->extensions . " " . self::UPLOAD_FILE_EXTENSION);
+
+		//only for specific extension of uploaded file
+		if($pagefile->ext() !== self::UPLOAD_FILE_EXTENSION) return;
+
+		$out = $event->return;
+
+		//hide filesize info
+		$out = str_replace("<span class='InputfieldFileStats'>", "<span style='display:none'>", $out);
+
+		//change <a> to <span> to prevent clicking
+		$out = str_replace("<a class='InputfieldFileName' title=",
+			"<span class='InputfieldFileName' onmouseover='this.style.textDecoration=\"none\";this.style.cursor=\"auto\"' data-title=", $out);
+		$out = str_replace("." . self::UPLOAD_FILE_EXTENSION . "</a>", "." . self::UPLOAD_FILE_EXTENSION . "</span>", $out);
+
+		//change fa-file icon to fa-link
+		$out = str_replace("<i class='fa fa-file-o fa-fw", "<i class='fa fa-link fa-fw", $out);
+
+		$event->return = $out;
+	}
+
+
+	/**
+	 * Add insert link button/link
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function addUrlButton(HookEvent $event) {
+		// Only for ProcessPageEdit
+		if($this->process != 'ProcessPageEdit') return;
+		if($this('wire')->config->demo) return;
+
+		$inputfield = $event->object;
+		$out = $event->return;
+		$field = $inputfield->hasField;
+		$filename = self::UPLOAD_FILE_PREFIX . '#.' . self::UPLOAD_FILE_EXTENSION; //# will be replaced by random numbers in js
+
+		$button_text = $this->_('Insert URL');
+
+		$button = "<small><button class='url-upload-toggle InputMask uk-button uk-button-small ui-button ui-widget ui-corner-all ui-state-default ui-priority-secondary' " .
+			"data-fieldname='{$field->name}' " .
+			"data-filename='{$filename}' " .
+			">" .
+			"<span class='ui-button-text'><i class='fa fa-link'></i> $button_text</span></button></small>";
+		$button = "<a class='url-upload-toggle uk-button-small uk-link uk-padding-remove-left' style='margin-left:10px' href='#' " .
+			"data-fieldname='{$field->name}' " .
+			"data-filename='{$filename}' " .
+			">" .
+			"<i class='fa fa-link'></i> $button_text</a>";
+		$out = str_replace("<span class='InputfieldFileValidExtensions", "$button<span class='InputfieldFileValidExtensions", $out);
+		$out = str_replace("<div class='InputMask ui-button ui-state-default'>", "<div class='InputMask ui-button ui-state-default uk-margin-remove-right'>", $out);
+
+		$event->return = $out;
+	}
+
+	/**
+	 * Add JS and CSS dependencies
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function addDependencies(HookEvent $event) {
+		//if($this->config->ajax) return;
+
+		$config = $this('wire')->config;
+		$info = $this->getModuleInfo();
+		$version = $info['version'];
+		$config->scripts->add($config->urls->{$this} . "{$this}.js?v={$version}");
+		$config->styles->add($config->urls->{$this} . "{$this}.css?v={$version}");
+	}
+
+}
