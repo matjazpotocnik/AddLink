@@ -11,14 +11,24 @@
 }
 
 /* AdminThemeUikit */
-.AdminThemeUikit .InputfieldFileData .InputfieldURL {
+.xAdminThemeUikit .InputfieldFileData .InputfieldURL {
 	border: 1px solid #d9e1ea;
 	/*border-top: 0;*/ /* ce das margin top, potem mora biti border povsod */
 	outline: none;
 	margin-top: 15px;
 }
 
-.AdminThemeUikit .InputfieldFileData .InputfieldURL > label {
+.AdminThemeUikit .InputfieldFileData .Inputfield > label {
 	padding-top: 10px;
 }
 
+.AdminThemeUikit .InputfieldFileData .Inputfield:first-child {
+	margin-top: 1em;
+	border-top: 1px solid #d9e1ea;
+}
+
+.AdminThemeUikit .InputfieldFileData .Inputfield {
+	border: 1px solid #d9e1ea;
+	border-top: 0; /* ce das margin top, potem mora biti border povsod */
+	outline: none;
+}

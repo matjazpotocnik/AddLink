@@ -4,95 +4,161 @@
  *
  * Add Link to Filefield
  *
- * @version 0.0.1
- * @author Matjaž Potočnik, inspired by module Add Image URLs by Robin Sallis
+ * @version 0.0.2
+ * @author Matjaž Potočnik, inspired by the module Add Image URLs by Robin Sallis
  *
  * ProcessWire 3.x
  * Copyright (C) Ryan Cramer
  * Licensed under GNU/GPL v2, see LICENSE.TXT
  *
  * https://processwire.com
-
- HOW it works:
-
- 1. Create (or use existing) FieldtypeFile, name it "datoteka". Allow multiple files, 1 line description,
-    allow uploading of files with "link" (UPLOAD_FILE_EXTENSION const) extension
- 2. Create (or use existing) FieldtypeURL, name it "povezava"
- 3. Create template, name it "field-datoteka" and add a field "povezava" to teh template
- 4. Add field "datoteka" to some template. Pages that use this template now have upload filed with the
-    description field and povezava field
- 5. Install this module and change appropriate constants with the fields name, in this example
-    UPLOAD_FIELD = "datoteka" and URL_FIELD = "povezava"
- 6. Install this module. It adds a link "Insert URL" next to the "Upload file" button. When you click
-    "Insert URL" link it "uploads" a fake file named "povezava_xxxxxxx.link" (xxxxxx are rundom numbers)
-    and adds "povezava" field where you can enter URL. Note that "povezava" field is visible only when
-    URL is "uploaded", its not present when you upload regular file
-    See video https://processwire.com/talk/topic/22829-link-upload/?do=findComment&comment=195776
- 7. In the template file on the frontend you would iterate over "datoteka" field and render files as
-    usual, checking if current file has "povezava" field and it's non empty and file has "link" extension
-
+ *
+ * Please read https://processwire.com/blog/posts/pw-3.0.142/ and USAGE.MD for instructions
+ *
  */
 
-class AddLink extends WireData implements Module {
+class AddLink extends WireData implements Module, ConfigurableModule {
 
 	/**
 	 * Module information
 	 */
 	public static function getModuleInfo() {
 		return array(
-			'title' => "Add Links",
+			'title' => 'Add Links',
 			'summary' => 'Allows links to be added to files field',
-			'version' => '0.0.1',
+			'version' => '0.0.2',
 			'author' => 'Matja&#382; Poto&#269;nik',
-			//'href' => 'https://github.com/todo',
+			'href' => 'https://github.com/matjazpotocnik/AddLink',
 			'icon' => 'link',
 			'autoload' => 'template=admin',
-			'requires' => 'ProcessWire>=3.0.126',
+			'requires' => 'ProcessWire>=3.0.142',
 		);
 	}
 
-	const UPLOAD_FIELD = "datoteka"; // name of upload field (FieldtypeFile), must support uploading the files with UPLOAD_FILE_EXTENSION
-	const URL_FIELD = "povezava"; // name of field holding the link URL (FiledtypeURL)
-	const UPLOAD_FILE_EXTENSION = "link"; // extension of the "uploaded" file
-	const UPLOAD_FILE_PREFIX = "povezava_"; // prefix of the "uploaded" file
+	const UPLOAD_FILE_EXTENSION = "link"; // extension of the "uploaded" file, perhaps this should be configurable?
+	const UPLOAD_FILE_PREFIX = "_"; // prefix of the "uploaded" file, perhaps this should be configurable?
+
+	const FILE_FIELDS = 'file_fields';
+	const URL_FIELDS = 'url_fields';
 
 	protected $pagefile;
 
+	/**
+	 * This module config data
+	 * @var array
+	 */
+	protected static $configData = [];
 
 	/**
-	 * Ready
+	 * This module default config data
+	 * @var array
+	 */
+	protected static $configDataDefault = [];
+
+	/**
+	 * Construct and set default configuration
+	 *
+	 */
+	public function __construct() {
+
+		self::$configDataDefault = [
+			self::FILE_FIELDS => [], // array of file fields (FieldtypeFile) with upload link support
+			self::URL_FIELDS => [], // array of fields inside field-* templates that should not be shown
+		];
+
+		self::$configData = $this->_sanitize_data($this->wire('modules')->getModuleConfigData($this));
+	}
+
+	private function _sanitize_data($data) {
+		if(empty($data)) return self::$configDataDefault;
+
+		$_data = $data;
+
+		//sanitize $data if needed
+
+		$data = array_merge(self::$configDataDefault, $data);
+
+		if(json_encode($data) != json_encode($_data)) $this->wire('modules')->saveConfig($this, $data);
+		return $data;
+	}
+
+	/**
+	 * Add the extension to the FieldtypeFile to allow uploads and setup hooks
 	 */
 	public function ready() {
-		$field = $this('wire')->fields->get(self::UPLOAD_FIELD);
-		$field->set('extensions', $field->extensions . " " . self::UPLOAD_FILE_EXTENSION);
+
+		// return early if no file field is setup in the module config
+		$filefields = self::$configData[self::FILE_FIELDS];
+		if(empty($filefields)) return;
+
+		$fields = $this->wire('fields');
+		foreach($filefields as $fieldname){
+			//bd($fieldname);
+			$field = $fields->get($fieldname);
+			if(strpos($field->extensions, self::UPLOAD_FILE_EXTENSION) === false) {
+				$field->set('extensions', $field->extensions . ' ' . self::UPLOAD_FILE_EXTENSION);
+			}
+			//bd($field);
+		}
 
 		$this->addHookAfter('InputfieldFile::render', $this, 'addUrlButton');
 		$this->addHookBefore('ProcessPageEdit::execute', $this, 'addDependencies');
 		$this->addHookBefore('InputfieldFile::renderItem', $this, 'renderItemBefore');
 		$this->addHookAfter('InputfieldFile::renderItem', $this, 'renderItemAfter');
-		$this->addHookBefore('InputfieldURL::render', $this, 'hideField');
+		//$this->addHookBefore('InputfieldURL::render', $this, 'hideFieldURL');
+		$this->addHookBefore('Inputfield::render', $this, 'hideField'); //more generic, allowing for InputfieldText to be used as input
 	}
 
 	/**
-	 * Prevent rendering of self::URL_FIELD if contained inside self::UPLOAD_FIELD
+	 * Prevent rendering of url field if contained inside file field
 	 *
 	 * @param HookEvent $event
 	 */
-	protected function hideField(HookEvent $event) {
+	protected function hideFieldURL(HookEvent $event) {
 		$inputfieldURL = $event->object;
 		$field = $inputfieldURL->hasField;
 
 		//only for specific field
-		if(!$field || $field->name != self::URL_FIELD) return;
+		if(!$field || !in_array($field->name, self::$configData[self::URL_FIELDS])) return;
 
 		if($this->pagefile && $this->pagefile->ext() !== self::UPLOAD_FILE_EXTENSION) {
-			//hide "povezava"
+			//hide the field
 			$event->replace = true;
 		}
 	}
 
 	/**
-	 * Set $this->pagefile if field name is self::UPLOAD_FIELD
+	 * Prevent rendering of field if contained inside file field
+	 *
+	 * @param HookEvent $event
+	 */
+	protected function hideField(HookEvent $event) {
+		$inputfield = $event->object;
+		$hasField = $inputfield->hasField; //povezava
+
+		//return early if no field
+		if(!$hasField) return;
+
+		//return if field is not on the list of fields to hide
+		if(!in_array($hasField, self::$configData[self::URL_FIELDS])) return;
+
+		//field is on the list of fields to hide, but it must be inside selected file field templates
+		$field = $inputfield->name; //povezava_datoteka_11f1e0d07a1530f599810dba7b25435e
+		$field1 = str_replace($hasField . '_', '', $field); //datoteka_11f1e0d07a1530f599810dba7b25435e
+		$found = false;
+		foreach(self::$configData[self::FILE_FIELDS] as $fld) {
+			if(strpos($field1, $fld) === 0) $found = true;
+		}
+		if(!$found) return;
+
+		if($this->pagefile && $this->pagefile->ext() !== self::UPLOAD_FILE_EXTENSION) {
+			//hide the field
+			$event->replace = true;
+		}
+	}
+
+	/**
+	 * Set $this->pagefile if field name is on self::$configData[self::FILE_FIELDS]
 	 *
 	 * @param HookEvent $event
 	 */
@@ -105,7 +171,7 @@ class AddLink extends WireData implements Module {
 		if(!$field) return;
 
 		//only for specific upload field name
-		if($field->name != self::UPLOAD_FIELD) return;
+		if(!in_array($field->name, self::$configData[self::FILE_FIELDS])) return;
 
 		//pagefile needed in hideField hook
 		$this->pagefile = $event->arguments[0];
@@ -126,7 +192,7 @@ class AddLink extends WireData implements Module {
 		if(!$field) return;
 
 		//only for specific upload field name
-		if($field->name != self::UPLOAD_FIELD) return;
+		if(!in_array($field->name, self::$configData[self::FILE_FIELDS])) return;
 
 		//$field->set('extensions', $field->extensions . " " . self::UPLOAD_FILE_EXTENSION);
 
@@ -151,20 +217,19 @@ class AddLink extends WireData implements Module {
 
 
 	/**
-	 * Add insert link button/link
+	 * Add insert link button/link for enabled file fields
 	 *
 	 * @param HookEvent $event
 	 */
 	protected function addUrlButton(HookEvent $event) {
-		// Only for ProcessPageEdit
 		if($this->process != 'ProcessPageEdit') return;
-		if($this('wire')->config->demo) return;
+		if($this->wire('config')->demo) return;
 
 		$inputfield = $event->object;
-		$out = $event->return;
 		$field = $inputfield->hasField;
-		$filename = self::UPLOAD_FILE_PREFIX . '#.' . self::UPLOAD_FILE_EXTENSION; //# will be replaced by random numbers in js
+		if(!in_array($field->name, self::$configData[self::FILE_FIELDS])) return;
 
+		$filename = self::UPLOAD_FILE_PREFIX . '#.' . self::UPLOAD_FILE_EXTENSION; //# will be replaced by random numbers in js
 		$button_text = $this->_('Insert URL');
 
 		$button = "<small><button class='url-upload-toggle InputMask uk-button uk-button-small ui-button ui-widget ui-corner-all ui-state-default ui-priority-secondary' " .
@@ -177,6 +242,9 @@ class AddLink extends WireData implements Module {
 			"data-filename='{$filename}' " .
 			">" .
 			"<i class='fa fa-link'></i> $button_text</a>";
+
+		$out = $event->return;
+
 		$out = str_replace("<span class='InputfieldFileValidExtensions", "$button<span class='InputfieldFileValidExtensions", $out);
 		$out = str_replace("<div class='InputMask ui-button ui-state-default'>", "<div class='InputMask ui-button ui-state-default uk-margin-remove-right'>", $out);
 
@@ -191,11 +259,81 @@ class AddLink extends WireData implements Module {
 	protected function addDependencies(HookEvent $event) {
 		//if($this->config->ajax) return;
 
-		$config = $this('wire')->config;
+		$config = $this->wire('config');
 		$info = $this->getModuleInfo();
 		$version = $info['version'];
 		$config->scripts->add($config->urls->{$this} . "{$this}.js?v={$version}");
 		$config->styles->add($config->urls->{$this} . "{$this}.css?v={$version}");
+	}
+
+	/**
+	 * Configure the input fields for the backend.
+	 *
+	 * @param  array  $data Module data from the database.
+	 * @return InputfieldWrapper
+	 */
+	public function getModuleConfigInputfields($data) {
+		if(empty($data)) $data = self::$configDataDefault;
+
+		$modules = $this->wire('modules');
+		$fields = $this->wire('fields');
+		$templates = $this->wire('templates');
+		$wrapper = new InputfieldWrapper();
+
+		// usage
+		$f = $modules->get('InputfieldMarkup');
+		$f->label = __('Instructions (must read)');
+		$f->icon = 'book';
+		$usage = file_get_contents(__DIR__ . '/USAGE.md');
+		$usage = $f->entityEncode($usage, Inputfield::textFormatMarkdown);
+		$f->value = $usage;
+		$wrapper->add($f);
+
+		// list of FieldtypeFile fields
+		$f = $modules->get('InputfieldAsmSelect');
+		$f_name = self::FILE_FIELDS;
+		$f->name = $f_name;
+		$f->label = $this->_('File fields to allow to have links upload');
+		$f->description = $this->_('File fields must match field name that you added to your template. Save after changing this as it may affect what settings are available on the "Fields to hide" list.');
+		$f->icon = 'list';
+		$f->columnWidth = 50;
+
+		// only include non-system fields and "special" templates that act as a container for other fields
+		$options = [];
+		foreach($fields->find('type=FieldtypeFile') as $field) {
+			if($field->flags & Field::flagSystem || $field->flags & Field::flagPermanent) continue;
+			if($templates->find("name=field-{$field->name}")->count > 0) $options[$field->name] = $field->name;
+		}
+		$f->addOptions($options);
+		$f->value = $data[$f->name];
+		$wrapper->add($f);
+
+		// list of FieldtypeURL fields
+		$f = $modules->get('InputfieldAsmSelect');
+		$f_name = self::URL_FIELDS;
+		$f->name = $f_name;
+		$f->label = $this->_('Fields to hide when used on regular files');
+		$f->description = $this->_('Selected fields will be hidden when they are used with regular uploaded files.');
+		$f->icon = 'list';
+		$f->columnWidth = 50;
+
+		// only include fields that are inside "field-*" templates and exclude non-system fields
+		$options1 = [];
+		$tpls_selector = 'name=field-' . implode('|field-', $options); // name=field-myfiles1|fields-myfiles2|...
+		$tpls = $templates->find($tpls_selector);
+		foreach($tpls as $tpl) {
+			//$fldgs = $tpl->fields->find('type=FieldtypeURL|FieldtypeText'); //fieldgroups
+			$fldgs = $tpl->fields; //supports hiding other fields too, not just url or text
+			foreach($fldgs as $fld) {
+				if($fld->flags & Field::flagSystem || $fld->flags & Field::flagPermanent) continue;
+				$options1[$fld->name] = $fld->name;
+			}
+		}
+		$f->addOptions($options1);
+		$f->value = $data[$f->name];
+		$wrapper->add($f);
+
+		return $wrapper;
 	}
 
 }
