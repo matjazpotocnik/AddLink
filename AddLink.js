@@ -7,8 +7,8 @@ $(function() {
 		var filename = $this.data('filename');
 		var $fileList = $('.Inputfield_' + fieldName + ' .InputfieldFileList');
 		var $progressItem = $('<li class="InputfieldFile ui-widget AjaxUpload"><p class="InputfieldFileInfo ui-widget ui-widget-header InputfieldItemHeader"></p></li>');
-		var	$progressBar = $('<div class="ui-progressbar ui-widget ui-widget-content ui-corner-all" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>');
-		var	$progressBarValue = $('<div class="ui-progressbar-value ui-widget-header InputfieldItemHeader ui-corner-left" style="width: 0%; "></div>');
+		//MP: not used? var	$progressBar = $('<div class="ui-progressbar ui-widget ui-widget-content ui-corner-all" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>');
+		//MP: not used? var	$progressBarValue = $('<div class="ui-progressbar-value ui-widget-header InputfieldItemHeader ui-corner-left" style="width: 0%;"></div>');
 		var doneTimer = null;
 		var xhr;
 

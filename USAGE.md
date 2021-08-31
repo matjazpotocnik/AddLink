@@ -13,7 +13,7 @@
 6. Edit a page that is using your template. Notice "Insert URL" link next to the "Upload file" button. When you
    click "Insert URL", a "fake" file named "_xxxxxxx.link" is uploaded (xxxxxx are random numbers) and "mylink"
    input field is displayed where you can enter your URL. 
-   See video https://processwire.com/talk/topic/22829-link-upload/?do=findComment&comment=195776
+   See [video](https://processwire.com/talk/topic/22829-link-upload/?do=findComment&comment=195776).
 7. In the template file on the frontend, you would iterate over "myfiles" field and render files as
    usual, checking if the current file has "mylink" field (and the file has a "link" extension):
 
